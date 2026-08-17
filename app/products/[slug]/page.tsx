@@ -1,8 +1,25 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProduct, getRelatedProducts } from "@/lib/api";
 import ProductDetail from "@/components/product-detail";
 
-export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+type ProductPageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProduct(slug);
+
+  if (!product) return {};
+
+  return {
+    title: { absolute: product.name },
+    description: product.description,
+  };
+}
+
+export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) notFound();

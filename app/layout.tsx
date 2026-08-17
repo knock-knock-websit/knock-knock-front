@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(canonical),
     title: {
       default: "敲敲韓國代購",
-      template: "%s｜敲敲",
+      template: "%s｜敲敲韓國代購",
     },
     description: siteDescription,
     applicationName: siteName,

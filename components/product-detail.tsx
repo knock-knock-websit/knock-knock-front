@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Product, ProductDetail as ProductDetailType } from "@/lib/types";
 import ProductArtwork from "@/components/product-artwork";
 import FavoriteButton from "@/components/favorite-button";
-import SiteChrome, { addCartItem } from "@/components/site-chrome";
+import {addCartItem, SiteChrome} from "@/components/site-chrome";
 import { getAccessToken, getSession } from "@/lib/client-auth";
 import { useFavoriteStore } from "@/lib/favorite-store";
 import { showToast } from "@/lib/toast";

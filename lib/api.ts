@@ -5,6 +5,7 @@ import type {
   ProductDetail,
   ProductListResponse,
   PublicCarousel,
+  ShippingSettings,
 } from "./types";
 
 const serverApiUrl = process.env.API_URL ?? "http://localhost:8787";
@@ -102,6 +103,7 @@ export async function createOrder(input: {
   shippingMethod: string;
   recipientName: string;
   recipientPhone: string;
+  deliveryAddress?: string;
   orderNote?: string;
   couponCode?: string | null;
   userCouponId?: string | null;
@@ -135,4 +137,11 @@ export async function getSevenElevenStores(query: { search?: string; page?: numb
   const payload = await response.json().catch(() => null) as { data?: SevenElevenStore[]; message?: string; meta?: { total?: number } } | null;
   if (!response.ok || !payload?.data) throw new Error(payload?.message ?? "無法載入 7-ELEVEN 門市");
   return { data: payload.data, total: Number(payload.meta?.total ?? 0) };
+}
+
+export async function getShippingSettings(): Promise<ShippingSettings> {
+  const response = await fetch("/api/logistics/shipping-settings", { cache: "no-store" });
+  const payload = await response.json().catch(() => null) as { data?: ShippingSettings; message?: string } | null;
+  if (!response.ok || !payload?.data) throw new Error(payload?.message ?? "無法載入物流設定");
+  return payload.data;
 }

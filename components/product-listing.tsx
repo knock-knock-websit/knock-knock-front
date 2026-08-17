@@ -8,7 +8,7 @@ import { formatProductPrice } from "@/lib/product-price";
 import ProductArtwork from "@/components/product-artwork";
 import FavoriteButton from "@/components/favorite-button";
 import { FormInput, FormRadio, FormSelect } from "@/components/form-controls";
-import SiteChrome, { addCartItem } from "@/components/site-chrome";
+import {addCartItem, SiteChrome} from "@/components/site-chrome";
 import { getAccessToken } from "@/lib/client-auth";
 
 const PAGE_SIZE = 30;

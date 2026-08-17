@@ -168,6 +168,7 @@ export type MemberOrder = {
   pickupStoreId: string;
   pickupStoreAddress: string;
   pickupStorePhone: string;
+  deliveryAddress: string;
   promotionName: string | null;
   couponCode: string | null;
   orderNote: string;
@@ -225,6 +226,14 @@ export type CheckoutPreview = {
   promotion: { id: string; name: string } | null;
   couponCode: string | null;
   userCouponId: string | null;
+};
+
+export type ShippingSettings = {
+  sevenElevenEnabled: boolean;
+  sevenEleven: number;
+  homeDeliveryEnabled: boolean;
+  homeDelivery: number;
+  updatedAt: string;
 };
 
 export type PublicCoupon = {

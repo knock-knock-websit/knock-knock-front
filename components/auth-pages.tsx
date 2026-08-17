@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import SiteChrome from "@/components/site-chrome";
+import {SiteChrome} from "@/components/site-chrome";
 import { FormInput } from "@/components/form-controls";
 import { getPendingVerification, getSession, loginUser, logoutUser, registerUser, requestPasswordReset, resendVerification, resetPassword, verifyEmail, type AuthSession } from "@/lib/client-auth";
 import { showToast } from "@/lib/toast";
@@ -69,6 +69,7 @@ export function RegisterPage() {
     const data = new FormData(event.currentTarget);
     const name = String(data.get("name") ?? "").trim();
     const account = String(data.get("account") ?? "").trim().toLowerCase();
+    const phone = String(data.get("phone") ?? "").trim();
     const password = String(data.get("password") ?? "");
     const confirm = String(data.get("confirm") ?? "");
     const errors: AuthFieldErrors = {};
@@ -77,6 +78,8 @@ export function RegisterPage() {
     if (!account) errors.account = "請輸入 Email";
     else if (!emailPattern.test(account)) errors.account = "請輸入正確的 Email 格式";
     else if (account.length > 254) errors.account = "Email 最多 254 個字元";
+    if (!phone) errors.phone = "請輸入手機號碼";
+    else if (!/^09\d{8}$/.test(phone)) errors.phone = "請輸入 09 開頭的 10 位數手機號碼";
     if (!password) errors.password = "請輸入密碼";
     else if (password.length < 8) errors.password = "密碼至少需要 8 個字元";
     else if (password.length > 128) errors.password = "密碼最多 128 個字元";
@@ -87,7 +90,7 @@ export function RegisterPage() {
     if (Object.keys(errors).length) return;
     setBusy(true);
     try {
-      await registerUser({ account, name, type: "email", password });
+      await registerUser({ account, name, phone, type: "email", password });
       showToast("註冊成功，請完成 Email 驗證");
       router.push("/auth/verify-email");
     } catch (cause) {
@@ -96,7 +99,7 @@ export function RegisterPage() {
       else setMessage(errorMessage);
     } finally { setBusy(false); }
   };
-  return <AuthFrame eyebrow="JOIN THE CLUB" title="建立會員帳號" intro="使用 Email 建立帳號，開啟你的專屬收藏清單。"><form className="auth-form" onSubmit={submit} noValidate><AuthInput label="姓名" name="name" required maxLength={80} autoComplete="name" placeholder="如何稱呼你？" error={fieldErrors.name} errorId="register-name-error" onChange={() => clearError("name")} /><AuthInput label="Email" name="account" required type="email" maxLength={254} autoComplete="email" placeholder="name@example.com" error={fieldErrors.account} errorId="register-account-error" onChange={() => clearError("account")} /><AuthInput label="設定密碼" name="password" required minLength={8} maxLength={128} type="password" autoComplete="new-password" placeholder="8 至 128 個字元" error={fieldErrors.password} errorId="register-password-error" onChange={() => { clearError("password"); clearError("confirm"); }} /><AuthInput label="再次輸入密碼" name="confirm" required minLength={8} maxLength={128} type="password" autoComplete="new-password" placeholder="再次確認密碼" error={fieldErrors.confirm} errorId="register-confirm-error" onChange={() => clearError("confirm")} /><Message text={message} /><button className="auth-submit" disabled={busy}>{busy ? "建立帳號中…" : "建立帳號"}<span>→</span></button></form><p className="auth-switch">已經是會員？<Link href="/auth/login">返回登入</Link></p></AuthFrame>;
+  return <AuthFrame eyebrow="JOIN THE CLUB" title="建立會員帳號" intro="使用 Email 建立帳號，開啟你的專屬收藏清單。"><form className="auth-form" onSubmit={submit} noValidate><AuthInput label="姓名" name="name" required maxLength={80} autoComplete="name" placeholder="如何稱呼你？" error={fieldErrors.name} errorId="register-name-error" onChange={() => clearError("name")} /><AuthInput label="Email" name="account" required type="email" maxLength={254} autoComplete="email" placeholder="name@example.com" error={fieldErrors.account} errorId="register-account-error" onChange={() => clearError("account")} /><AuthInput label="手機號碼" name="phone" required type="tel" inputMode="numeric" maxLength={10} autoComplete="tel" placeholder="0912345678" error={fieldErrors.phone} errorId="register-phone-error" onChange={() => clearError("phone")} /><AuthInput label="設定密碼" name="password" required minLength={8} maxLength={128} type="password" autoComplete="new-password" placeholder="8 至 128 個字元" error={fieldErrors.password} errorId="register-password-error" onChange={() => { clearError("password"); clearError("confirm"); }} /><AuthInput label="再次輸入密碼" name="confirm" required minLength={8} maxLength={128} type="password" autoComplete="new-password" placeholder="再次確認密碼" error={fieldErrors.confirm} errorId="register-confirm-error" onChange={() => clearError("confirm")} /><Message text={message} /><button className="auth-submit" disabled={busy}>{busy ? "建立帳號中…" : "建立帳號"}<span>→</span></button></form><p className="auth-switch">已經是會員？<Link href="/auth/login">返回登入</Link></p></AuthFrame>;
 }
 
 export function VerifyEmailPage() {

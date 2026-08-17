@@ -23,6 +23,7 @@ export type MemberGender = "undisclosed" | "female" | "male" | "other";
 export type MemberProfile = {
   name: string;
   email: string;
+  phone: string;
   birthday: string | null;
   gender: MemberGender;
 };
@@ -219,6 +220,7 @@ export function getMemberProfile(): Promise<MemberProfile> {
 
 export async function updateMemberProfile(input: {
   name: string;
+  phone: string;
   birthday: string | null;
   gender: MemberGender;
 }): Promise<MemberProfile> {
@@ -249,6 +251,7 @@ export function getPendingVerification(): {
 export async function registerUser(input: {
   account: string;
   name: string;
+  phone: string;
   type: "email";
   password: string;
 }) {
@@ -260,6 +263,7 @@ export async function registerUser(input: {
   }>("/api/auth/register", {
     email: input.account,
     name: input.name,
+    phone: input.phone,
     password: input.password,
   });
   sessionStorage.setItem(

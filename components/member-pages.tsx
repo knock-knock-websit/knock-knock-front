@@ -13,7 +13,7 @@ import {
   FormInput,
   FormSelect,
 } from "@/components/form-controls";
-import SiteChrome from "@/components/site-chrome";
+import {SiteChrome} from "@/components/site-chrome";
 import {
   changePassword,
   createMemberAddress,
@@ -55,7 +55,6 @@ const memberNav = [
   ["/account/favorites", "收藏商品"],
   ["/account/coupons", "優惠券"],
   ["/account/notifications", "通知紀錄"],
-  ["/account/refunds", "退款或取消申請"],
 ];
 
 const paymentLabels = {
@@ -234,6 +233,7 @@ export function MemberDashboard() {
 export function ProfilePage() {
   const [profile, setProfile] = useState<MemberProfile>();
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
   const [gender, setGender] = useState<MemberGender>("undisclosed");
   const [message, setMessage] = useState("");
@@ -243,6 +243,7 @@ export function ProfilePage() {
       .then((data) => {
         setProfile(data);
         setName(data.name);
+        setPhone(data.phone);
         setBirthday(data.birthday ?? "");
         setGender(data.gender);
       })
@@ -255,11 +256,17 @@ export function ProfilePage() {
   }, []);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const normalizedPhone = phone.trim();
+    if (!/^09\d{8}$/.test(normalizedPhone)) {
+      setMessage("請輸入 09 開頭的 10 位數手機號碼");
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
       const updated = await updateMemberProfile({
         name,
+        phone: normalizedPhone,
         birthday: birthday || null,
         gender,
       });
@@ -293,6 +300,21 @@ export function ProfilePage() {
               type="email"
               disabled
               value={profile?.email ?? "載入中…"}
+            />
+          </label>
+          <label>
+            手機號碼
+            <FormInput
+              name="phone"
+              required
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              maxLength={10}
+              pattern="09[0-9]{8}"
+              placeholder="0912345678"
+              value={phone}
+              onChange={(event) => { setPhone(event.target.value); setMessage(""); }}
             />
           </label>
           <label>
@@ -648,7 +670,7 @@ export function OrdersPage() {
           <span>訂單編號</span>
           <span>購買品項／數量</span>
           <span>金額</span>
-          <span>超商門市</span>
+          <span>配送方式</span>
           <span>付款方式</span>
           <span>付款狀態</span>
           <span>出貨狀態</span>
@@ -679,7 +701,7 @@ export function OrdersPage() {
             </div>
             <strong>NT$ {order.total.toLocaleString()}</strong>
             <span>
-              {order.pickupStoreName ? `${order.pickupStoreName}門市` : "—"}
+              {order.shippingMethod === "home" ? "宅配" : order.pickupStoreName ? `${order.pickupStoreName}門市` : "7-ELEVEN 取貨"}
             </span>
             <span>
               {order.paymentMethod === "bank_transfer"
@@ -978,16 +1000,18 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </b>
         </p>
         <p>
-          <span>取貨門市</span>
+          <span>配送方式</span>
           <b>
-            {order.pickupStoreName
+            {order.shippingMethod === "home"
+              ? "宅配"
+              : order.pickupStoreName
               ? `7-ELEVEN ${order.pickupStoreName}門市（${order.pickupStoreId}）`
               : "—"}
           </b>
         </p>
         <p>
-          <span>門市地址</span>
-          <b>{order.pickupStoreAddress || "—"}</b>
+          <span>{order.shippingMethod === "home" ? "宅配地址" : "門市地址"}</span>
+          <b>{order.shippingMethod === "home" ? order.deliveryAddress || "—" : order.pickupStoreAddress || "—"}</b>
         </p>
         <p>
           <span>付款／出貨狀態</span>
@@ -1015,14 +1039,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <b>NT$ {order.total.toLocaleString()}</b>
         </p>
       </div>
-      {order.paymentStatus !== "refunded" && order.shippingStatus !== "delivered" && (
-        <Link
-          className="refund-link"
-          href={`/account/refunds?order=${order.id}`}
-        >
-          申請取消或退款
-        </Link>
-      )}
     </MemberShell>
   );
 }

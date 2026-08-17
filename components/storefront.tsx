@@ -7,7 +7,7 @@ import { formatProductPrice } from "@/lib/product-price";
 import ProductArtwork from "@/components/product-artwork";
 import FavoriteButton from "@/components/favorite-button";
 import { FormInput } from "@/components/form-controls";
-import SiteChrome, { addCartItem } from "@/components/site-chrome";
+import {addCartItem, SiteChrome} from "@/components/site-chrome";
 import { getAccessToken, getSession } from "@/lib/client-auth";
 import { useFavoriteStore } from "@/lib/favorite-store";
 

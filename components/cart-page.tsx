@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import SiteChrome from "@/components/site-chrome";
+import {SiteChrome} from "@/components/site-chrome";
 import { FormInput } from "@/components/form-controls";
 import { deleteMemberCartItem, getMemberCart, updateMemberCartItem } from "@/lib/member-cart";
 import type { MemberCart, MemberCartItem } from "@/lib/types";
@@ -62,7 +62,7 @@ export default function CartPage() {
     try { setCart(await deleteMemberCartItem(id)); }
     catch (error) { setMessage(error instanceof Error ? error.message : "商品刪除失敗"); }
   };
-  return <SiteChrome><section className="cart-page-head"><p className="eyebrow">YOUR SHOPPING CART</p><h1>購物車</h1></section>
+  return <SiteChrome>
     {message && <p className="member-message">{message}</p>}
     {loading ? <section className="cart-page-empty"><p>購物車載入中…</p></section> : !cart.items.length ? <section className="cart-page-empty"><span>✦</span><h2>購物車還是空的</h2><p>登入後挑一件讓今天閃閃發亮的收藏吧。</p><Link href="/products" className="primary-button">探索全部商品 <span>↗</span></Link></section> :
     <div className="cart-page-layout"><section className="cart-products"><div className="cart-table-head"><span>商品</span><span>數量</span><span>小計</span></div>{cart.items.map((item) => <article className="cart-page-item" key={item.id}><div className="cart-page-art">{item.specificationImageUrl ? <img src={item.specificationImageUrl} alt={item.productName} /> : <span className="product-art" />}</div><div className="cart-item-info"><p>{item.productCategory}</p><h2>{item.productName}</h2><strong>NT$ {item.unitPrice.toLocaleString()}</strong><div className="cart-specs">{item.specifications.map((specification) => <span key={specification.specificationId}>{specification.specificationName}：{specification.optionName}</span>)}</div><button className="remove-item" type="button" title="移除商品" aria-label={`移除${item.productName}`} onClick={() => void remove(item.id)}><TrashIcon /></button></div><CartQuantity item={item} onChange={(quantity) => updateQuantity(item.id, quantity)} /><strong className="cart-line-total">NT$ {item.totalPrice.toLocaleString()}</strong></article>)}</section>

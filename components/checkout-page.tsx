@@ -8,8 +8,9 @@ import type {
   CreateOrderResponse,
   MemberCart,
   UserCoupon,
+  ShippingSettings,
 } from "@/lib/types";
-import { createOrder, type SevenElevenStore } from "@/lib/api";
+import { createOrder, getShippingSettings, type SevenElevenStore } from "@/lib/api";
 import { getMemberCart } from "@/lib/member-cart";
 import {
   getMyCoupons,
@@ -17,14 +18,25 @@ import {
   validatePromotionCode,
 } from "@/lib/promotions";
 import { FormInput, FormRadio, FormSelect } from "@/components/form-controls";
-import SiteChrome from "@/components/site-chrome";
+import {SiteChrome} from "@/components/site-chrome";
 import SevenElevenStorePicker from "@/components/seven-eleven-store-picker";
 import {
   getMemberAddresses,
+  getMemberProfile,
   getSession,
   type MemberAddress,
 } from "@/lib/client-auth";
 import { showToast } from "@/lib/toast";
+
+type ShippingMethod = "store" | "home";
+type CheckoutField = "recipient" | "phone" | "email" | "pickupStore" | "deliveryAddress";
+type CheckoutFieldErrors = Partial<Record<CheckoutField, string>>;
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function CheckoutFieldError({ id, message }: { id: string; message?: string }) {
+  return message ? <small className="checkout-field-error" id={id} role="alert">{message}</small> : null;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -33,7 +45,7 @@ export default function CheckoutPage() {
     totalQuantity: 0,
     totalAmount: 0,
   });
-  const shippingMethod = "store";
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("store");
   const [coupon, setCoupon] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [userCouponId, setUserCouponId] = useState("");
@@ -56,6 +68,9 @@ export default function CheckoutPage() {
   const [recipient, setRecipient] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({});
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>();
   useEffect(() => {
     const storedUserCouponId =
       localStorage.getItem("knock-knock-user-coupon") || "";
@@ -67,18 +82,23 @@ export default function CheckoutPage() {
     const session = getSession();
     setRecipient(session?.name ?? "");
     setEmail(session?.account ?? "");
-    void Promise.all([getMemberCart(), getMyCoupons(), getMemberAddresses()])
-      .then(async ([nextCart, coupons, addresses]) => {
+    void Promise.all([getMemberCart(), getMyCoupons(), getMemberAddresses(), getShippingSettings(), getMemberProfile()])
+      .then(async ([nextCart, coupons, addresses, nextShippingSettings, memberProfile]) => {
+        const initialShippingMethod: ShippingMethod = nextShippingSettings.sevenElevenEnabled ? "store" : "home";
+        setShippingSettings(nextShippingSettings);
+        setShippingMethod(initialShippingMethod);
         setCart(nextCart);
         setSavedStores(addresses);
+        setRecipient(memberProfile.name);
+        setEmail(memberProfile.email);
         const preferredStore =
           addresses.find((item) => item.isDefault) ?? addresses[0];
         if (preferredStore) {
           setSelectedSavedStoreId(preferredStore.id);
           setPickupStore(preferredStore.pickupStore);
           setRecipient(preferredStore.recipient);
-          setPhone(preferredStore.phone);
         }
+        setPhone(memberProfile.phone || preferredStore?.phone || "");
         const available = coupons.filter(
           (item) =>
             item.status === "available" &&
@@ -95,7 +115,7 @@ export default function CheckoutPage() {
               const preview = await validateMemberCoupon({
                 userCouponId: item.id,
                 items,
-                shippingMethod,
+                shippingMethod: initialShippingMethod,
               });
               return [item.id, { usable: true, reason: "", preview }] as const;
             } catch (cause) {
@@ -120,7 +140,7 @@ export default function CheckoutPage() {
               await validatePromotionCode({
                 code: storedCode,
                 items,
-                shippingMethod,
+                shippingMethod: initialShippingMethod,
               }),
             );
           } catch {
@@ -151,11 +171,32 @@ export default function CheckoutPage() {
       optionName: specification.optionName,
     })),
   }));
-  const defaultShipping = 60;
+  const defaultShipping = shippingMethod === "store"
+    ? shippingSettings?.sevenEleven ?? 0
+    : shippingSettings?.homeDelivery ?? 0;
   const discount = pricing?.discount ?? 0;
   const shipping = pricing?.shipping ?? defaultShipping;
   const total =
     pricing?.total ?? Math.max(0, cart.totalAmount - discount + shipping);
+  const changeShippingMethod = async (method: ShippingMethod) => {
+    if (method === shippingMethod) return;
+    setShippingMethod(method);
+    setPricing(undefined);
+    setError("");
+    setFieldErrors((current) => ({ ...current, pickupStore: undefined, deliveryAddress: undefined }));
+    if (!coupon && !userCouponId) return;
+    setCouponLoading(true);
+    try {
+      const result = coupon
+        ? await validatePromotionCode({ code: coupon, items: orderItems, shippingMethod: method })
+        : await validateMemberCoupon({ userCouponId, items: orderItems, shippingMethod: method });
+      setPricing(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "無法重新計算優惠");
+    } finally {
+      setCouponLoading(false);
+    }
+  };
   const applyCoupon = async () => {
     const code = couponInput.trim().toUpperCase();
     if (!code) {
@@ -238,24 +279,52 @@ export default function CheckoutPage() {
     setPickupStore(address.pickupStore);
     setRecipient(address.recipient);
     setPhone(address.phone);
+    setFieldErrors((current) => ({ ...current, recipient: undefined, phone: undefined, pickupStore: undefined }));
     setError("");
+  };
+  const clearFieldError = (field: CheckoutField) => {
+    setFieldErrors((current) => current[field] ? { ...current, [field]: undefined } : current);
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
-    if (shippingMethod === "store" && !pickupStore) {
-      const nextError = "請先選擇 7-ELEVEN 取貨門市";
-      setError(nextError);
-      showToast(nextError, "error");
+    const normalizedRecipient = recipient.trim();
+    const normalizedPhone = phone.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const nextFieldErrors: CheckoutFieldErrors = {};
+    if (!normalizedRecipient) nextFieldErrors.recipient = "請輸入收件人姓名";
+    else if (normalizedRecipient.length > 80) nextFieldErrors.recipient = "收件人姓名不可超過 80 個字元";
+    if (!normalizedPhone) nextFieldErrors.phone = "請輸入手機號碼";
+    else if (!/^09\d{8}$/.test(normalizedPhone)) nextFieldErrors.phone = "請輸入 09 開頭的 10 位數手機號碼";
+    if (!normalizedEmail) nextFieldErrors.email = "請輸入電子信箱";
+    else if (normalizedEmail.length > 254 || !emailPattern.test(normalizedEmail)) nextFieldErrors.email = "請輸入正確的 Email 格式";
+    if (shippingMethod === "store" && !pickupStore) nextFieldErrors.pickupStore = "請選擇 7-ELEVEN 取貨門市";
+    if (shippingMethod === "home" && !deliveryAddress.trim()) nextFieldErrors.deliveryAddress = "請輸入宅配地址";
+    else if (deliveryAddress.trim().length > 200) nextFieldErrors.deliveryAddress = "宅配地址不可超過 200 個字元";
+    setFieldErrors(nextFieldErrors);
+    const firstInvalidField = (["recipient", "phone", "email", "pickupStore", "deliveryAddress"] as CheckoutField[])
+      .find((field) => nextFieldErrors[field]);
+    if (firstInvalidField) {
+      const elementId = firstInvalidField === "pickupStore" ? "checkout-pickup-store" : `checkout-${firstInvalidField}`;
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(elementId);
+        if (target instanceof HTMLInputElement) target.focus();
+        else target?.querySelector<HTMLButtonElement>("button")?.focus();
+      });
+      showToast(nextFieldErrors[firstInvalidField] ?? "請確認必填欄位", "error");
       return;
     }
+    setRecipient(normalizedRecipient);
+    setPhone(normalizedPhone);
+    setEmail(normalizedEmail);
     setSubmitting(true);
     try {
       const order = await createOrder({
         items: orderItems,
         shippingMethod,
-        recipientName: recipient,
-        recipientPhone: phone,
+        recipientName: normalizedRecipient,
+        recipientPhone: normalizedPhone,
+        deliveryAddress: shippingMethod === "home" ? deliveryAddress.trim() : "",
         couponCode: coupon || null,
         userCouponId: coupon ? null : userCouponId || null,
         pickupStore:
@@ -346,7 +415,7 @@ export default function CheckoutPage() {
           </Link>
         </section>
       ) : (
-        <form className="checkout-layout" onSubmit={submit}>
+        <form className="checkout-layout" onSubmit={submit} noValidate>
           <div className="checkout-forms">
             <section className="checkout-section">
               <div className="checkout-section-title">
@@ -357,35 +426,50 @@ export default function CheckoutPage() {
                 </div>
               </div>
               <div className="form-grid">
-                <label>
+                <label className={fieldErrors.recipient ? "has-error" : ""}>
                   收件人姓名
                   <FormInput
+                    id="checkout-recipient"
                     name="name"
                     required
+                    maxLength={80}
                     value={recipient}
-                    onChange={(event) => setRecipient(event.target.value)}
+                    aria-invalid={Boolean(fieldErrors.recipient)}
+                    aria-describedby={fieldErrors.recipient ? "checkout-recipient-error" : undefined}
+                    onChange={(event) => { setRecipient(event.target.value); clearFieldError("recipient"); }}
                   />
+                  <CheckoutFieldError id="checkout-recipient-error" message={fieldErrors.recipient} />
                 </label>
-                <label>
+                <label className={fieldErrors.phone ? "has-error" : ""}>
                   手機號碼
                   <FormInput
+                    id="checkout-phone"
                     name="phone"
                     required
                     inputMode="tel"
                     pattern="09[0-9]{8}"
+                    maxLength={10}
                     value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
+                    aria-invalid={Boolean(fieldErrors.phone)}
+                    aria-describedby={fieldErrors.phone ? "checkout-phone-error" : undefined}
+                    onChange={(event) => { setPhone(event.target.value); clearFieldError("phone"); }}
                   />
+                  <CheckoutFieldError id="checkout-phone-error" message={fieldErrors.phone} />
                 </label>
-                <label className="full">
+                <label className={`full ${fieldErrors.email ? "has-error" : ""}`.trim()}>
                   電子信箱
                   <FormInput
+                    id="checkout-email"
                     name="email"
                     required
                     type="email"
+                    maxLength={254}
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={fieldErrors.email ? "checkout-email-error" : undefined}
+                    onChange={(event) => { setEmail(event.target.value); clearFieldError("email"); }}
                   />
+                  <CheckoutFieldError id="checkout-email-error" message={fieldErrors.email} />
                 </label>
               </div>
             </section>
@@ -398,12 +482,18 @@ export default function CheckoutPage() {
                 </div>
               </div>
               <div className="checkout-choice-grid">
-                <label className="selected">
-                  <FormRadio name="delivery" checked readOnly />
+                {shippingSettings?.sevenElevenEnabled && <label>
+                  <FormRadio name="delivery" value="store" checked={shippingMethod === "store"} required onChange={() => void changeShippingMethod("store")} />
                   <b>7-ELEVEN 取貨</b>
-                </label>
+                  <strong>{shippingSettings.sevenEleven ? `NT$ ${shippingSettings.sevenEleven}` : "免運"}</strong>
+                </label>}
+                {shippingSettings?.homeDeliveryEnabled && <label>
+                  <FormRadio name="delivery" value="home" checked={shippingMethod === "home"} required onChange={() => void changeShippingMethod("home")} />
+                  <b>宅配</b>
+                  <strong>{shippingSettings.homeDelivery ? `NT$ ${shippingSettings.homeDelivery}` : "免運"}</strong>
+                </label>}
               </div>
-              {savedStores.length > 0 && (
+              {shippingMethod === "store" && savedStores.length > 0 && (
                 <div className="saved-store-select">
                   <label>
                     選擇常用門市
@@ -423,14 +513,25 @@ export default function CheckoutPage() {
                   </label>
                 </div>
               )}
-              <SevenElevenStorePicker
-                selectedStore={pickupStore}
-                onSelect={(store) => {
-                  setSelectedSavedStoreId("");
-                  setPickupStore(store);
-                  setError("");
-                }}
-              />
+              {shippingMethod === "store" && <div id="checkout-pickup-store" className={`checkout-store-field ${fieldErrors.pickupStore ? "has-error" : ""}`.trim()} aria-invalid={Boolean(fieldErrors.pickupStore)} aria-describedby={fieldErrors.pickupStore ? "checkout-pickup-store-error" : undefined}>
+                <SevenElevenStorePicker
+                  selectedStore={pickupStore}
+                  onSelect={(store) => {
+                    setSelectedSavedStoreId("");
+                    setPickupStore(store);
+                    clearFieldError("pickupStore");
+                    setError("");
+                  }}
+                />
+                <CheckoutFieldError id="checkout-pickup-store-error" message={fieldErrors.pickupStore} />
+              </div>}
+              {shippingMethod === "home" && <div className="form-grid checkout-delivery-address">
+                <label className={`full ${fieldErrors.deliveryAddress ? "has-error" : ""}`.trim()}>
+                  宅配地址
+                  <FormInput id="checkout-deliveryAddress" required maxLength={200} value={deliveryAddress} placeholder="請輸入完整收件地址" aria-invalid={Boolean(fieldErrors.deliveryAddress)} aria-describedby={fieldErrors.deliveryAddress ? "checkout-delivery-address-error" : undefined} onChange={(event) => { setDeliveryAddress(event.target.value); clearFieldError("deliveryAddress"); }} />
+                  <CheckoutFieldError id="checkout-delivery-address-error" message={fieldErrors.deliveryAddress} />
+                </label>
+              </div>}
             </section>
             <section className="checkout-section">
               <div className="checkout-section-title">
@@ -442,7 +543,7 @@ export default function CheckoutPage() {
               </div>
               <div className="checkout-choice-grid payment">
                 <label className="selected">
-                  <FormRadio name="payment" checked readOnly />
+                  <FormRadio name="payment" value="bank_transfer" checked required readOnly />
                   <b>銀行轉帳</b>
                 </label>
               </div>
